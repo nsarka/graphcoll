@@ -1,0 +1,12 @@
+sources=
+A: process 0, size 1 MB // specify rank, size, datatype, etc
+B: process 1, size 1 MB
+C: process 2, size 1 MB
+D: process 3, size 1 MB
+
+destinations=
+E: process 0, [A,B,C,D] // E is ABCD combined
+F: process 1, [A,B,C,D] // So is F, G, H
+G: process 2, [A,B,C,D]
+H: process 3, [A,B,C,D]
+
