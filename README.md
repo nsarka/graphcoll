@@ -1,10 +1,10 @@
 # Collective Graph Parser (Flex + Bison)
 
 This project implements a simple
-domain-specific language (DSL) that describes custom collective communication
+domain-specific language that describes custom collective communication
 patterns. `MPI_Allgather` is used as an example collective because it is well known. 
 
-The DSL format is shown in the sample file [`allgather.coll`](./allgather.coll):
+The language format is shown in the sample file [`allgather.coll`](./allgather.coll):
 
 ```text
 sources=
@@ -45,7 +45,7 @@ Each Destination Buffer specifies:
 This generates the parser (parser.tab.c/h), lexer (lexer.c), and final binary
 collparse.
 
-# Run
+# Run the Testbench
 
 To parse the provided example:
 
@@ -73,26 +73,22 @@ To parse the provided example:
 
 `parser.y` – grammar and semantic actions (Bison)
 
-`main.c` – driver program, prints parsed result
+`main.c` – testbench program, prints parsed result
 
 `Makefile` – build rules
 
 `allgather.coll` – sample DSL input
 
-# Extending
+# Roadmap
 
-Possible extensions:
-
-- Add datatype keywords (float, int32, etc.)
-- Support sizes with KB, MB, GB
-- Export the parse result as JSON
-
-Hook into a backend implementation (e.g., UCX ucp_tag_send/recv)
-to perform the actual collective communication described.
+- [ ] Add datatype keywords (float, int32, etc.)
+- [ ] Support sizes with KB, MB, GB
+- [ ] Hook into a backend implementation (e.g., UCX ucp_tag_send/recv)
+to perform the actual collective communication described
 
 # Notes
 
-Empty rules in the grammar use %empty (Bison 3.8+).
+Empty rules in the grammar use `%empty` (Bison 3.8+).
 
-In lexer.l, comments use // inside the rules section;
+In `lexer.l`, comments use // inside the rules section;
 block comments /* ... */ are only valid inside C code sections (%{ ... %}).
