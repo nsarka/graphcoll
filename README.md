@@ -85,6 +85,7 @@ To parse the provided example:
 - [ ] Support sizes with KB, MB, GB
 - [ ] Hook into a backend implementation (e.g., UCX ucp_tag_send/recv)
 to perform the actual collective communication described
+- [ ] Create a basic optimization pass that will intelligently arrange p2p operations
 
 # Notes
 
