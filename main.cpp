@@ -29,14 +29,14 @@ int main(int argc, const char* argv[]) {
     }
     my_rank_buffer_list.push_back(buf);
 
-    GraphColl::Graph bcast;
-    // src, dst, sendWeight, recvWeight
-    // if weight is 0 then it's a "don't-care"
+    // Set up a graph with an edge from the root to every nonroot
+    GraphColl::Graph bcast(rank, comm_size);
+    // src, dst, weights (0 means "don't-care")
     for (int i = 1; i < comm_size; i++) {
         bcast.addEdge(root, i, 0, 0);
     }
 
-    bcast.execute(rank, comm_size, my_rank_buffer_list);
+    bcast.execute(my_rank_buffer_list);
     
     // Validate
     std::vector<int> gathered(comm_size, -1);

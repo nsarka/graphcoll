@@ -25,14 +25,16 @@ struct Edge {
 
 class Graph {
 public:
-    Graph();
+    Graph(int rank, int n);
     ~Graph();
-    int vertices() const { return vertices_; }
-    int execute(int rank, int comm_size, std::vector<Buffer> &buffers);
+    int n() const { return n_; }
+    int execute(std::vector<Buffer> &buffers);
     void addEdge(int src, int dest, int sendWeight, int recvWeight);
-    int addVertex();
 private:
-    int vertices_;
+    void optimizationPass(std::vector<Buffer> &buffers);
+    void postComms(std::vector<Buffer> &buffers);
+    int n_;
+    int rank_;
     std::vector<std::vector<Edge>> adj_;
 };
 
