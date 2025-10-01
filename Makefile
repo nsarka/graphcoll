@@ -1,17 +1,20 @@
 # Simple build
 # Requires: flex, bison, gcc (or clang)
 
-all: collparse
+all: testbench
 
-parser.tab.c parser.tab.h: parser.y
-	bison -Wall -Wcounterexamples -d parser.y
+#parser.tab.c parser.tab.h: parser.y
+#	bison -Wall -Wcounterexamples -d parser.y
 
-lexer.c: lexer.l parser.tab.h
-	flex -o lexer.c lexer.l
+#lexer.c: lexer.l parser.tab.h
+#	flex -o lexer.c lexer.l
 
-collparse: parser.tab.c lexer.c main.c
-	$(CC) -o collparse parser.tab.c lexer.c main.c -lfl
+graphcoll: graph.cpp
+	mpicxx -o libgraphcoll.so graph.cpp -lfl -fPIC -shared
+
+testbench: graphcoll main.cpp
+	mpicxx -o testbench main.cpp -L. -lgraphcoll
 
 clean:
-	rm -f collparse parser.tab.* lexer.c
+	rm -f testbench libgraphcoll.so
 
