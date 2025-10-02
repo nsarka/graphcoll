@@ -9,8 +9,9 @@ all: testbench
 #lexer.c: lexer.l parser.tab.h
 #	flex -o lexer.c lexer.l
 
+# -lfl
 graphcoll: graph.cpp
-	mpicxx -o libgraphcoll.so graph.cpp -lfl -fPIC -shared
+	mpicxx -o libgraphcoll.so graph.cpp -fPIC -shared
 
 testbench: graphcoll main.cpp
 	mpicxx -o testbench main.cpp -L. -lgraphcoll

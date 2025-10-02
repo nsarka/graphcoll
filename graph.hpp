@@ -19,8 +19,11 @@ struct Buffer {
 
 struct Edge {
     int to;         // Where this edge goes
-    int sendWeight; // The order the sending node should process the edge
-    int recvWeight; // The order the recving node should process the edge
+    int from;       // Where this edge comes from
+    int sendIndex; // The index in the vector of buffers that this edge should use when sending
+    int recvIndex; // Same but for receiving
+    //int sendWeight; // The order the sending node should process the edge
+    //int recvWeight; // The order the recving node should process the edge
 };
 
 class Graph {
