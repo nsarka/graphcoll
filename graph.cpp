@@ -15,7 +15,7 @@ void Graph::optimizationPass(std::vector<Buffer> &buffers) {
 }
 
 void Graph::postComms(std::vector<Buffer> &buffers) {
-    // Step 1: Find incoming edges (edges where this rank_ is the destination)
+    // Find incoming edges (edges where this rank_ is the destination)
     std::vector<Edge> incoming;
     for (int i = 0; i < n_; i++) {
         for (const Edge& edge : adj_[i]) {
@@ -25,7 +25,7 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
         }
     }
     
-    // Step 2: Post MPI_Recv for each incoming edge TODO: assert recvIndex is in bound of buffers
+    // Post MPI_Recv for each incoming edge TODO: assert recvIndex is in bound of buffers
     std::vector<MPI_Request> recv_requests;
     for (const Edge& edge : incoming) {
         MPI_Request request;
@@ -33,10 +33,9 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
         recv_requests.push_back(request);
     }
     
-    
     std::vector<Edge> &outgoing = adj_[rank_];
     
-    // Step 5: Post MPI_Send for each outgoing edge TODO: assert sendIndex is in bounds of buffers
+    // Post MPI_Send for each outgoing edge TODO: assert sendIndex is in bounds of buffers
     std::vector<MPI_Request> send_requests;
     for (const Edge& edge : outgoing) {
         MPI_Request request;
