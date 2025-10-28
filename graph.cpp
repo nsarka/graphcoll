@@ -42,28 +42,38 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     }
     
     // Custom comparator for sorting edges
-    // Priority: dependent incoming edges first, then other incoming edges, then outgoing edges
+    // Priority: 
+    // 1. Independent sends (sends not dependent on any receive)
+    // 2. All receives
+    // 3. Dependent sends (sends that depend on a receive completing)
     auto edge_comparator = [&dependent_buffer_indices](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
         bool a_is_recv = a.first;
         bool b_is_recv = b.first;
         const Edge* a_edge = a.second;
         const Edge* b_edge = b.second;
         
-        // If both are recvs or both are sends
-        if (a_is_recv == b_is_recv) {
-            if (a_is_recv) {
-                // Both are recvs: prioritize dependent recvs
-                bool a_is_dependent = dependent_buffer_indices.count(a_edge->recvIndex) > 0;
-                bool b_is_dependent = dependent_buffer_indices.count(b_edge->recvIndex) > 0;
-                if (a_is_dependent != b_is_dependent) {
-                    return a_is_dependent; // dependent comes first
-                }
-            }
-            return false; // maintain relative order
+        // Determine if sends are dependent
+        bool a_is_dependent = false;
+        bool b_is_dependent = false;
+        if (!a_is_recv) {
+            a_is_dependent = dependent_buffer_indices.count(a_edge->sendIndex) > 0;
+        }
+        if (!b_is_recv) {
+            b_is_dependent = dependent_buffer_indices.count(b_edge->sendIndex) > 0;
         }
         
-        // Recvs always come before sends
-        return a_is_recv;
+        // Calculate priority (lower number = higher priority)
+        // 0: independent send
+        // 1: recv
+        // 2: dependent send
+        int a_priority = a_is_recv ? 1 : (a_is_dependent ? 2 : 0);
+        int b_priority = b_is_recv ? 1 : (b_is_dependent ? 2 : 0);
+        
+        if (a_priority != b_priority) {
+            return a_priority < b_priority;
+        }
+        
+        return false; // maintain relative order within same priority
     };
     
     // Create a sorted list of operations
@@ -85,20 +95,14 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     int recv_idx = 0;
     int send_idx = 0;
     
-    // Post all receives first
+    // Post operations in priority order
     for (const auto& op : operations) {
         if (op.first) { // is_recv
             const Edge* edge = op.second;
             MPI_Irecv(buffers[edge->recvIndex].data, buffers[edge->recvIndex].size, 
                      MPI_BYTE, edge->from, 0, MPI_COMM_WORLD, &recv_requests[recv_idx]);
             recv_idx++;
-        }
-    }
-    
-    // Now post sends, waiting for dependent receives to complete first
-    recv_idx = 0;
-    for (const auto& op : operations) {
-        if (!op.first) { // is_send
+        } else { // is_send
             const Edge* edge = op.second;
             
             // Check if this send depends on a receive
@@ -112,12 +116,10 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
                 }
             }
             
-            // Post the send
+            // Post the send (independent sends post immediately, dependent sends post after recv completes)
             MPI_Isend(buffers[edge->sendIndex].data, buffers[edge->sendIndex].size, 
                      MPI_BYTE, edge->to, 0, MPI_COMM_WORLD, &send_requests[send_idx]);
             send_idx++;
-        } else {
-            recv_idx++;
         }
     }
     
