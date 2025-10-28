@@ -30,10 +30,11 @@ void test_ring_allgather(int rank, int comm_size) {
     GraphColl::Graph allgather(rank, comm_size);
     for (int i = 0; i < comm_size; i++) {
         for (int j = 0; j < comm_size; j++) {
-            // Add send to the next rank
-            allgather.addEdge(rank, (rank + 1) % comm_size, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
+            if (i == j) continue; // The buffer is already inplace
+            // Add send to the next rank (in the i loop, i is the current rank we're considering in the graph))
+            allgather.addEdge(i, (i + 1) % comm_size, (i - j + comm_size) % comm_size, (i - j + comm_size) % comm_size);
             // Add recv from the prev rank
-            allgather.addEdge((rank - 1 + comm_size) % comm_size, rank, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
+            allgather.addEdge((i - 1 + comm_size) % comm_size, i, (i - j - 1 + comm_size) % comm_size, (i - j - 1 + comm_size) % comm_size);
         }
     }
 
