@@ -2,7 +2,7 @@
 
 export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
 
-hosts="dgx-gaia-46:8"
+hosts="dgx-gaia-26:8"
 
 set -x
 

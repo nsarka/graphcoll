@@ -52,6 +52,7 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     }
 }
 
+/* Run the heuristics to optimize the graph, then post the comms */
 int Graph::execute(std::vector<Buffer> &buffers) {
     // Validate inputs
     if (buffers.empty()) {
@@ -65,6 +66,7 @@ int Graph::execute(std::vector<Buffer> &buffers) {
     return 0;
 }
 
+/* Represents a send from src's sendIndex and into dest's recvIndex */
 void Graph::addEdge(int src, int dest, int sendIndex, int recvIndex) {
     adj_[src].push_back({dest, src, sendIndex, recvIndex});
 }
