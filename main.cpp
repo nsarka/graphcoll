@@ -31,9 +31,9 @@ void test_ring_allgather(int rank, int comm_size) {
     for (int i = 0; i < comm_size; i++) {
         for (int j = 0; j < comm_size; j++) {
             // Add send to the next rank
-            allgather.addEdge(rank, rank+1, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
+            allgather.addEdge(rank, (rank + 1) % comm_size, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
             // Add recv from the prev rank
-            allgather.addEdge(rank-1, rank, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
+            allgather.addEdge((rank - 1 + comm_size) % comm_size, rank, (rank - j + comm_size) % comm_size, (rank - j - 1 + comm_size) % comm_size);
         }
     }
 
