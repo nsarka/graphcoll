@@ -1,7 +1,7 @@
 #include "graph.hpp"
 #include <mpi.h>
-#include <algorithm>
-#include <set>
+#include <iostream>
+#include <vector>
 
 namespace GraphColl {
 
@@ -21,115 +21,117 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     std::vector<Edge> incoming;
     for (int i = 0; i < n_; i++) {
         for (const Edge& edge : adj_[i]) {
-	    if (edge.to == rank_) {
-	        incoming.push_back(edge);
+            if (edge.to == rank_) {
+                incoming.push_back(edge);
             }
         }
     }
     
     std::vector<Edge> &outgoing = adj_[rank_];
     
-    // Build dependency map: for each outgoing edge's sendIndex, find if there's an incoming edge with matching recvIndex
-    // A dependent edge is an incoming edge where recvIndex equals an outgoing edge's sendIndex
-    std::set<int> dependent_buffer_indices;
-    for (const Edge& out_edge : outgoing) {
-        for (const Edge& in_edge : incoming) {
-            if (in_edge.recvIndex == out_edge.sendIndex) {
-                dependent_buffer_indices.insert(out_edge.sendIndex);
-                break;
+    // Build operation dependency graph using topological sort
+    // Operation indices: [0, incoming.size()) are receives, [incoming.size(), incoming.size() + outgoing.size()) are sends
+    size_t num_ops = incoming.size() + outgoing.size();
+    std::vector<std::vector<size_t>> op_graph(num_ops);  // op_graph[i] = list of operations that depend on operation i
+    std::vector<int> in_degree(num_ops, 0);  // Number of dependencies for each operation
+    
+    // Build dependency edges: recv_i -> send_j if send_j uses buffer that recv_i writes to
+    for (size_t send_idx = 0; send_idx < outgoing.size(); send_idx++) {
+        int send_buffer = outgoing[send_idx].sendIndex;
+        
+        // Check if any receive writes to this buffer
+        for (size_t recv_idx = 0; recv_idx < incoming.size(); recv_idx++) {
+            if (incoming[recv_idx].recvIndex == send_buffer) {
+                // This send depends on this receive
+                op_graph[recv_idx].push_back(incoming.size() + send_idx);
+                in_degree[incoming.size() + send_idx]++;
             }
         }
     }
     
-    // Custom comparator for sorting edges
-    // Priority: 
-    // 1. Independent sends (sends not dependent on any receive)
-    // 2. All receives
-    // 3. Dependent sends (sends that depend on a receive completing)
-    auto edge_comparator = [&dependent_buffer_indices](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
-        bool a_is_recv = a.first;
-        bool b_is_recv = b.first;
-        const Edge* a_edge = a.second;
-        const Edge* b_edge = b.second;
-        
-        // Determine if sends are dependent
-        bool a_is_dependent = false;
-        bool b_is_dependent = false;
-        if (!a_is_recv) {
-            a_is_dependent = dependent_buffer_indices.count(a_edge->sendIndex) > 0;
-        }
-        if (!b_is_recv) {
-            b_is_dependent = dependent_buffer_indices.count(b_edge->sendIndex) > 0;
-        }
-        
-        // Calculate priority (lower number = higher priority)
-        // 0: independent send
-        // 1: recv
-        // 2: dependent send
-        int a_priority = a_is_recv ? 1 : (a_is_dependent ? 2 : 0);
-        int b_priority = b_is_recv ? 1 : (b_is_dependent ? 2 : 0);
-        
-        if (a_priority != b_priority) {
-            return a_priority < b_priority;
-        }
-        
-        return false; // maintain relative order within same priority
-    };
+    // Topological sort using Kahn's algorithm
+    std::vector<size_t> topo_order;
+    std::vector<size_t> ready_queue;
     
-    // Create a sorted list of operations
-    std::vector<std::pair<bool, const Edge*>> operations; // (is_recv, edge*)
-    for (const Edge& edge : incoming) {
-        operations.push_back({true, &edge});
-    }
-    for (const Edge& edge : outgoing) {
-        operations.push_back({false, &edge});
+    // Start with all operations that have no dependencies
+    for (size_t i = 0; i < num_ops; i++) {
+        if (in_degree[i] == 0) {
+            ready_queue.push_back(i);
+        }
     }
     
-    std::stable_sort(operations.begin(), operations.end(), edge_comparator);
-    
-    // Post operations in sorted order
-    std::vector<MPI_Request> recv_requests(incoming.size());
-    std::vector<MPI_Request> send_requests(outgoing.size());
-    std::vector<bool> recv_completed(incoming.size(), false);
-    
-    int recv_idx = 0;
-    int send_idx = 0;
-    
-    // Post operations in priority order
-    for (const auto& op : operations) {
-        if (op.first) { // is_recv
-            const Edge* edge = op.second;
-            MPI_Irecv(buffers[edge->recvIndex].data, buffers[edge->recvIndex].size, 
-                     MPI_BYTE, edge->from, 0, MPI_COMM_WORLD, &recv_requests[recv_idx]);
-            recv_idx++;
-        } else { // is_send
-            const Edge* edge = op.second;
-            
-            // Check if this send depends on a receive
-            if (dependent_buffer_indices.count(edge->sendIndex) > 0) {
-                // Find the corresponding receive and wait for it
-                for (size_t i = 0; i < incoming.size(); i++) {
-                    if (incoming[i].recvIndex == edge->sendIndex && !recv_completed[i]) {
-                        MPI_Wait(&recv_requests[i], MPI_STATUS_IGNORE);
-                        recv_completed[i] = true;
-                    }
-                }
+    while (!ready_queue.empty()) {
+        size_t op_idx = ready_queue.back();
+        ready_queue.pop_back();
+        topo_order.push_back(op_idx);
+        
+        // Reduce in-degree for dependent operations
+        for (size_t dependent_op : op_graph[op_idx]) {
+            in_degree[dependent_op]--;
+            if (in_degree[dependent_op] == 0) {
+                ready_queue.push_back(dependent_op);
             }
-            
-            // Post the send (independent sends post immediately, dependent sends post after recv completes)
-            MPI_Isend(buffers[edge->sendIndex].data, buffers[edge->sendIndex].size, 
-                     MPI_BYTE, edge->to, 0, MPI_COMM_WORLD, &send_requests[send_idx]);
-            send_idx++;
         }
+    }
+    
+    // Check for cycles (should not happen in valid communication patterns)
+    if (topo_order.size() != num_ops) {
+        std::cerr << "Error: Cyclic dependencies detected in communication pattern!" << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    
+    // Allocate request arrays
+    std::vector<MPI_Request> recv_requests(incoming.size(), MPI_REQUEST_NULL);
+    std::vector<MPI_Request> send_requests(outgoing.size(), MPI_REQUEST_NULL);
+    std::vector<bool> recv_posted(incoming.size(), false);
+    std::vector<bool> send_posted(outgoing.size(), false);
+    
+    // Strategy: Post ALL receives first to avoid deadlocks, then handle sends in dependency order
+    // This is the standard MPI pattern: receivers must be ready before senders can proceed
+    for (size_t recv_idx = 0; recv_idx < incoming.size(); recv_idx++) {
+        const Edge& edge = incoming[recv_idx];
+        MPI_Irecv(buffers[edge.recvIndex].data, buffers[edge.recvIndex].size,
+                 MPI_BYTE, edge.from, 0, MPI_COMM_WORLD, &recv_requests[recv_idx]);
+        recv_posted[recv_idx] = true;
+    }
+    
+    // Now process sends in topological order, waiting for dependencies as needed
+    for (size_t op_idx : topo_order) {
+        if (op_idx < incoming.size()) {
+            // This is a receive - already posted, skip
+            continue;
+        }
+        
+        // This is a send
+        size_t send_idx = op_idx - incoming.size();
+        const Edge& edge = outgoing[send_idx];
+        
+        // Check if this send depends on any receive
+        int send_buffer = edge.sendIndex;
+        for (size_t recv_idx = 0; recv_idx < incoming.size(); recv_idx++) {
+            if (incoming[recv_idx].recvIndex == send_buffer && recv_posted[recv_idx]) {
+                // Wait for the receive to complete before sending
+                MPI_Wait(&recv_requests[recv_idx], MPI_STATUS_IGNORE);
+                recv_posted[recv_idx] = false;  // Mark as completed
+            }
+        }
+        
+        // Post the send
+        MPI_Isend(buffers[edge.sendIndex].data, buffers[edge.sendIndex].size,
+                 MPI_BYTE, edge.to, 0, MPI_COMM_WORLD, &send_requests[send_idx]);
+        send_posted[send_idx] = true;
     }
     
     // Wait for all remaining operations to complete
-    if (!send_requests.empty()) {
-        MPI_Waitall(send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE);
+    for (size_t recv_idx = 0; recv_idx < incoming.size(); recv_idx++) {
+        if (recv_posted[recv_idx]) {
+            MPI_Wait(&recv_requests[recv_idx], MPI_STATUS_IGNORE);
+        }
     }
-    for (size_t i = 0; i < recv_requests.size(); i++) {
-        if (!recv_completed[i]) {
-            MPI_Wait(&recv_requests[i], MPI_STATUS_IGNORE);
+    
+    for (size_t send_idx = 0; send_idx < outgoing.size(); send_idx++) {
+        if (send_posted[send_idx]) {
+            MPI_Wait(&send_requests[send_idx], MPI_STATUS_IGNORE);
         }
     }
 }
