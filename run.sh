@@ -1,10 +1,10 @@
 #!/bin/bash
 
-PPN=2
+PPN=3
 
 export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
 
-hosts="dgx-gaia-26:$PPN"
+hosts="dgx-gaia-40:$PPN"
 
 set -x
 
