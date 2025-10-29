@@ -41,8 +41,8 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
         }
     }
     
-    // Custom comparator for sorting edges
-    auto edge_comparator = [&dependent_buffer_indices](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
+    // Sort the edges so that sends come before receives, except for when a send depends on a receive
+    auto edge_comparator = [&dependent_buffer_indices, &buffers](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
         bool a_is_recv = a.first;
         bool a_is_send = !a.first;
         bool b_is_recv = b.first;
@@ -56,6 +56,18 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
             int b_recv_index = b_edge->recvIndex;
             if (a_send_index == b_recv_index) {
                 return false; // Dependent recv comes first
+            }
+        }
+
+        // If both are sends and one is a source, make the source come first
+        if (a_is_send && b_is_send) {
+            BufferType a_type = buffers[a_edge->sendIndex].type;
+            BufferType b_type = buffers[b_edge->sendIndex].type;
+            if (a_type == GraphColl::BufferType::Source && b_type != GraphColl::BufferType::Source) {
+                return true;
+            }
+            if (a_type != GraphColl::BufferType::Source && b_type == GraphColl::BufferType::Source) {
+                return false;
             }
         }
 
