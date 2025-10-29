@@ -29,20 +29,8 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     
     std::vector<Edge> &outgoing = adj_[rank_];
     
-    // Build dependency map: for each outgoing edge's sendIndex, find if there's an incoming edge with matching recvIndex
-    // A dependent edge is an incoming edge where recvIndex equals an outgoing edge's sendIndex
-    std::set<int> dependent_buffer_indices;
-    for (const Edge& out_edge : outgoing) {
-        for (const Edge& in_edge : incoming) {
-            if (in_edge.recvIndex == out_edge.sendIndex) {
-                dependent_buffer_indices.insert(out_edge.sendIndex);
-                break;
-            }
-        }
-    }
-    
     // Sort the edges so that sends come before receives, except for when a send depends on a receive
-    auto edge_comparator = [&dependent_buffer_indices, &buffers](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
+    auto edge_comparator = [&buffers](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
         bool a_is_recv = a.first;
         bool a_is_send = !a.first;
         bool b_is_recv = b.first;
