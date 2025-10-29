@@ -114,7 +114,7 @@ void test_allgather(int rank, int comm_size) {
 }
 
 void test_bcast(int rank, int comm_size) {
-    int root = 0;
+    int root = 1;
     int my_data = rank;
 
     if (rank == 0) {
@@ -136,8 +136,9 @@ void test_bcast(int rank, int comm_size) {
 
     // Set up a graph with an edge from the root to every nonroot
     GraphColl::Graph bcast(rank, comm_size);
-    // src, dst, weights (0 means "don't-care")
-    for (int i = 1; i < comm_size; i++) {
+    // src, dst, srcIndex, dstIndex
+    for (int i = 0; i < comm_size; i++) {
+        if (i == root) continue;
         bcast.addEdge(root, i, 0, 0);
     }
 
@@ -165,9 +166,9 @@ int main(int argc, const char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    //test_bcast(rank, comm_size);
-    //test_allgather(rank, comm_size);
-    test_ring_allgather(rank, comm_size);
+    test_bcast(rank, comm_size);
+    test_allgather(rank, comm_size);
+    //test_ring_allgather(rank, comm_size);
 
     // Finalize the MPI environment.
     MPI_Finalize();
