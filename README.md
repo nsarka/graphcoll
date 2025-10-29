@@ -11,6 +11,10 @@ GraphColl represents collective communication operations (like broadcast, allgat
 
 The library handles the scheduling and execution of MPI send/receive operations based on the graph topology.
 
+## Why not NCCL or UCC?
+
+Because communication patterns are defined as graphs, you can easily express and execute any custom pattern you need. Before execution, an optimization pass improves the graph by fixing inefficiencies such as unnecessary duplicate edges, suboptimal use of the system topology, or imbalanced communication across ranks.
+
 ## Features
 
 - **Graph-based abstraction**: Define any custom collective operation as a directed graph
