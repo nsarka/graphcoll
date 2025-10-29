@@ -21,8 +21,8 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     std::vector<Edge> incoming;
     for (int i = 0; i < n_; i++) {
         for (const Edge& edge : adj_[i]) {
-	    if (edge.to == rank_) {
-	        incoming.push_back(edge);
+        if (edge.to == rank_) {
+            incoming.push_back(edge);
             }
         }
     }
@@ -42,10 +42,11 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     }
     
     // Custom comparator for sorting edges
-    // Priority: dependent incoming edges first, then other incoming edges, then outgoing edges
     auto edge_comparator = [&dependent_buffer_indices](const std::pair<bool, const Edge*>& a, const std::pair<bool, const Edge*>& b) {
+        bool a_is_recv = a.first;
         bool a_is_send = !a.first;
         bool b_is_recv = b.first;
+        bool b_is_send = !b.first;
         const Edge* a_edge = a.second;
         const Edge* b_edge = b.second;
 
@@ -53,10 +54,14 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
         if (a_is_send && b_is_recv) {
             int a_send_index = a_edge->sendIndex;
             int b_recv_index = b_edge->recvIndex;
-	    if (a_send_index == b_recv_index) {
-		return false; // Dependent recv comes first
-	    }
+            if (a_send_index == b_recv_index) {
+                return false; // Dependent recv comes first
+            }
         }
+
+        // If not a dependent edge, make sends come first
+        if (a_is_recv && b_is_send)
+            return false;
 
         // Otherwise take the (a,b) ordering
         return true;
