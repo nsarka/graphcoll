@@ -7,7 +7,7 @@ namespace GraphColl {
 
 enum BufferType {
     Source,
-    Destination,
+    Sink,
     Intermediate
 };
 
@@ -25,6 +25,15 @@ struct Edge {
     //int sendWeight; // The order the sending node should process the edge
     //int recvWeight; // The order the recving node should process the edge
 };
+
+// Overload << operator for easy printing of Edge
+inline std::ostream& operator<<(std::ostream& os, const Edge& edge) {
+    os << "Edge{from: " << edge.from 
+       << ", to: " << edge.to 
+       << ", sendIndex: " << edge.sendIndex 
+       << ", recvIndex: " << edge.recvIndex << "}";
+    return os;
+}
 
 class Graph {
 public:

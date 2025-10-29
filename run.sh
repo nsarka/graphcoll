@@ -8,7 +8,7 @@ hosts="dgx-gaia-40:$PPN"
 
 set -x
 
-mpirun -np $PPN -H $hosts ./testbench
+mpirun --tag-output -np $PPN -H $hosts ./testbench
 
 set +x
 

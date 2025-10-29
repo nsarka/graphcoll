@@ -20,8 +20,8 @@ void test_ring_allgather(int rank, int comm_size) {
         if (rank == i) {
             recvbuf[i] = rank; // Set the data inplace
             buf.type = GraphColl::BufferType::Source; // Source buffer is a source in the graph
-        } else if (rank == (i + 1) % comm_size) { // Last buffer in the ring to get filled in doesn't get sent
-            buf.type = GraphColl::BufferType::Destination; // Destination buffer is a sink in the graph
+        } else if (i == (rank + 1) % comm_size) { // Last buffer in the ring to get filled in doesn't get sent
+            buf.type = GraphColl::BufferType::Sink; // Destination buffer is a sink in the graph
         } else {
             buf.type = GraphColl::BufferType::Intermediate; // Intermediates are part of dependent edges (recv then send a buffer)
         }
@@ -82,7 +82,7 @@ void test_allgather(int rank, int comm_size) {
     for (int i = 0; i < comm_size; i++) {
         buf.data = &recvbuf[i];
         buf.size = sizeof(int) * comm_size;
-        buf.type = GraphColl::BufferType::Destination;
+        buf.type = GraphColl::BufferType::Sink;
         my_rank_buffer_list.push_back(buf);
     }
 
@@ -130,7 +130,7 @@ void test_bcast(int rank, int comm_size) {
     if (rank == root) {
         buf.type = GraphColl::BufferType::Source;
     } else {
-        buf.type = GraphColl::BufferType::Destination;
+        buf.type = GraphColl::BufferType::Sink;
     }
     my_rank_buffer_list.push_back(buf);
 
