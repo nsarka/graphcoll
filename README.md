@@ -1,95 +1,227 @@
-# Collective Graph Parser (Flex + Bison)
+# GraphColl: Graph-Based Collective Communication Library
 
-This project implements a simple
-domain-specific language that describes custom collective communication
-patterns. `MPI_Allgather` is used as an example collective because it is well known. 
+GraphColl is a C++ library for expressing and executing custom collective communication patterns using graph-based representations. Built on top of MPI, it allows you to define complex communication patterns as directed graphs and execute them efficiently.
 
-The language format is shown in the sample file [`allgather.coll`](./allgather.coll):
+## Overview
 
-```text
-sources=
-A: process 0, size 1 MB
-B: process 1, size 1 MB
-C: process 2, size 1 MB
-D: process 3, size 1 MB
+GraphColl represents collective communication operations (like broadcast, allgather, reduce-scatter, etc.) as directed graphs where:
+- **Nodes** represent MPI ranks
+- **Edges** represent point-to-point data transfers between ranks
+- **Buffers** can be sources, sinks, or intermediates in the communication flow
 
-destinations=
-E: process 0, [A,B,C,D]
-F: process 1, [A,B,C,D]
-G: process 2, [A,B,C,D]
-H: process 3, [A,B,C,D]
-```
+The library handles the scheduling and execution of MPI send/receive operations based on the graph topology.
 
-Each Source Buffer specifies:
+## Features
 
-- A buffer name (A, B, etc.)
-- The process rank that owns it
-- The size
+- **Graph-based abstraction**: Define any custom collective operation as a directed graph
+- **Automatic scheduling**: The library handles posting and completing communication operations
+- **Non-blocking communication**: Uses MPI_Isend/Irecv for asynchronous execution (this will likely change to direclty call UCX)
+- **Buffer type classification**: Distinguish between source, intermediate, and sink buffers
+- **Flexible edge specification**: Control which buffers are used for sending and receiving
 
-Each Destination Buffer specifies:
-
-- A buffer name (E, F, etc.)
-- The process rank that owns it
-- A list of input buffer names that should be combined into it
-
-# Dependencies
-
-- `flex`
-- `bison` (version ≥ 3.8 recommended)
-- `gcc` or `clang`
-
-# Build
-
-`make`
-
-This generates the parser (parser.tab.c/h), lexer (lexer.c), and final binary
-collparse.
-
-# Run the Testbench
-
-To parse the provided example:
-
-`./collparse allgather.coll`
-
-**Expected output:**
+## Project Structure
 
 ```
-=== Source Buffers (4) ===
-  A: process 0, size 1048576 bytes (1.00 MB)
-  B: process 1, size 1048576 bytes (1.00 MB)
-  C: process 2, size 1048576 bytes (1.00 MB)
-  D: process 3, size 1048576 bytes (1.00 MB)
-
-=== Destination Buffers (4) ===
-  E: process 0, inputs [A, B, C, D]
-  F: process 1, inputs [A, B, C, D]
-  G: process 2, inputs [A, B, C, D]
-  H: process 3, inputs [A, B, C, D]
+graphcoll/
+├── graph.hpp          # Header file with Graph, Buffer, and Edge definitions
+├── graph.cpp          # Implementation of Graph class with MPI logic
+├── main.cpp           # Test suite with broadcast, allgather examples
+├── Makefile           # Build system
+├── run.sh             # Script to run the testbench with MPI
+├── README.md          # This file
+└── LICENSE            # License information
 ```
 
-# Files
+## Dependencies
 
-`lexer.l` – token definitions (Flex)
+- **MPI implementation** (OpenMPI, MPICH, or similar)
+- **C++ compiler** with C++11 support (g++, clang++)
+- **mpicxx** wrapper for compiling MPI programs
 
-`parser.y` – grammar and semantic actions (Bison)
+## Building
 
-`main.c` – testbench program, prints parsed result
+```bash
+make
+```
 
-`Makefile` – build rules
+This generates:
+- `libgraphcoll.so` - Shared library containing the Graph class implementation
+- `testbench` - Executable with test cases
 
-`allgather.coll` – sample DSL input
+To clean build artifacts:
+```bash
+make clean
+```
 
-# Roadmap
+## Running Tests
 
-- [ ] Add datatype keywords (float, int32, etc.)
-- [ ] Support sizes with KB, MB, GB
-- [ ] Hook into a backend implementation (e.g., UCX ucp_tag_send/recv)
-to perform the actual collective communication described
-- [ ] Create a basic optimization pass that will intelligently arrange p2p operations
+The project includes a test suite with examples of broadcast and allgather implementations:
 
-# Notes
+```bash
+mpirun -n 4 ./testbench
+```
 
-Empty rules in the grammar use `%empty` (Bison 3.8+).
+Or use the provided script:
+```bash
+./run.sh
+```
 
-In `lexer.l`, comments use // inside the rules section;
-block comments /* ... */ are only valid inside C code sections (%{ ... %}).
+### Example Output
+
+```
+Building test bcast graph from root=1 to 4 other ranks in the comm
+Executing allgather graph...
+Done executing allgather graph
+Graph execution results:
+  Rank 0: 1
+  Rank 1: 1
+  Rank 2: 1
+  Rank 3: 1
+```
+
+## API Reference
+
+### Core Classes
+
+#### `GraphColl::Graph`
+
+Main class for defining and executing collective operations.
+
+```cpp
+Graph(int rank, int n);
+```
+- `rank`: MPI rank of the calling process
+- `n`: Total number of processes in the communicator
+
+```cpp
+void addEdge(int src, int dest, int sendIndex, int recvIndex);
+```
+- `src`: Source rank
+- `dest`: Destination rank
+- `sendIndex`: Index in the buffer list for the send operation
+- `recvIndex`: Index in the buffer list for the receive operation
+
+```cpp
+int execute(std::vector<Buffer> &buffers);
+```
+Executes the communication pattern defined by the graph edges.
+
+#### `GraphColl::Buffer`
+
+Represents a communication buffer.
+
+```cpp
+struct Buffer {
+    void *data;         // Pointer to the data
+    size_t size;        // Size in bytes
+    BufferType type;    // Source, Sink, or Intermediate
+};
+```
+
+#### `GraphColl::BufferType`
+
+```cpp
+enum BufferType {
+    Source,         // Buffer contains initial data to send
+    Sink,           // Buffer receives final data
+    Intermediate    // Buffer is used for both receiving and sending
+};
+```
+
+#### `GraphColl::Edge`
+
+Represents a data transfer between two ranks.
+
+```cpp
+struct Edge {
+    int to;         // Destination rank
+    int from;       // Source rank
+    int sendIndex;  // Buffer index for sending
+    int recvIndex;  // Buffer index for receiving
+};
+```
+
+## Usage Examples
+
+### Broadcast Example
+
+Broadcasting a value from root rank to all other ranks:
+
+```cpp
+int root = 1;
+int my_data = rank;
+
+std::vector<GraphColl::Buffer> buffers;
+GraphColl::Buffer buf;
+buf.data = &my_data;
+buf.size = sizeof(int);
+buf.type = (rank == root) ? GraphColl::BufferType::Source 
+                          : GraphColl::BufferType::Sink;
+buffers.push_back(buf);
+
+GraphColl::Graph bcast(rank, comm_size);
+for (int i = 0; i < comm_size; i++) {
+    if (i != root) {
+        bcast.addEdge(root, i, 0, 0);
+    }
+}
+
+bcast.execute(buffers);
+```
+
+### Allgather Example
+
+Gathering data from all ranks to all ranks:
+
+```cpp
+int *sendbuf = (int*) malloc(sizeof(int));
+int *recvbuf = (int*) malloc(sizeof(int) * comm_size);
+*sendbuf = rank;
+
+std::vector<GraphColl::Buffer> buffers;
+
+// Add send buffer
+GraphColl::Buffer buf;
+buf.data = sendbuf;
+buf.size = sizeof(int);
+buf.type = GraphColl::BufferType::Source;
+buffers.push_back(buf);
+
+// Add receive buffers
+for (int i = 0; i < comm_size; i++) {
+    buf.data = &recvbuf[i];
+    buf.size = sizeof(int);
+    buf.type = GraphColl::BufferType::Sink;
+    buffers.push_back(buf);
+}
+
+GraphColl::Graph allgather(rank, comm_size);
+for (int i = 0; i < comm_size; i++) {
+    for (int j = 0; j < comm_size; j++) {
+        allgather.addEdge(i, j, 0, i+1);
+    }
+}
+
+allgather.execute(buffers);
+```
+
+## Implementation Details
+
+### Edge Management
+
+- Edges are stored in an adjacency list structure
+- Duplicate edges are automatically filtered out
+- Each rank only stores outgoing edges in its adjacency list
+
+## Roadmap
+
+- [ ] Implement optimization pass to reorder operations for better performance
+- [ ] Implement system topology aware optimizations
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## License
+
+See the LICENSE file for details.
