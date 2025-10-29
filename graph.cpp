@@ -78,54 +78,15 @@ void Graph::postComms(std::vector<Buffer> &buffers) {
     
     std::stable_sort(operations.begin(), operations.end(), edge_comparator);
     
-    // Post operations in sorted order
-    std::vector<MPI_Request> recv_requests(incoming.size());
-    std::vector<MPI_Request> send_requests(outgoing.size());
-    std::vector<bool> recv_completed(incoming.size(), false);
-    
-    int recv_idx = 0;
-    int send_idx = 0;
-    
-    // Post all receives first
+    // Post operations in sorted order, using blocking sends and recvs as per the ordering in operations vector
     for (const auto& op : operations) {
+        const Edge* edge = op.second;
         if (op.first) { // is_recv
-            const Edge* edge = op.second;
-            MPI_Irecv(buffers[edge->recvIndex].data, buffers[edge->recvIndex].size, 
-                     MPI_BYTE, edge->from, 0, MPI_COMM_WORLD, &recv_requests[recv_idx]);
-            recv_idx++;
-        }
-    }
-    
-    // Now post sends, waiting for dependent receives to complete first
-    for (const auto& op : operations) {
-        if (!op.first) { // is_send
-            const Edge* edge = op.second;
-            
-            // Check if this send depends on a receive
-            if (dependent_buffer_indices.count(edge->sendIndex) > 0) {
-                // Find the corresponding receive and wait for it
-                for (size_t i = 0; i < incoming.size(); i++) {
-                    if (incoming[i].recvIndex == edge->sendIndex && !recv_completed[i]) {
-                        MPI_Wait(&recv_requests[i], MPI_STATUS_IGNORE);
-                        recv_completed[i] = true;
-                    }
-                }
-            }
-            
-            // Post the send
-            MPI_Isend(buffers[edge->sendIndex].data, buffers[edge->sendIndex].size, 
-                     MPI_BYTE, edge->to, 0, MPI_COMM_WORLD, &send_requests[send_idx]);
-            send_idx++;
-        }
-    }
-    
-    // Wait for all remaining operations to complete
-    if (!send_requests.empty()) {
-        MPI_Waitall(send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE);
-    }
-    for (size_t i = 0; i < recv_requests.size(); i++) {
-        if (!recv_completed[i]) {
-            MPI_Wait(&recv_requests[i], MPI_STATUS_IGNORE);
+            MPI_Recv(buffers[edge->recvIndex].data, buffers[edge->recvIndex].size,
+                     MPI_BYTE, edge->from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        } else { // is_send
+            MPI_Send(buffers[edge->sendIndex].data, buffers[edge->sendIndex].size,
+                     MPI_BYTE, edge->to, 0, MPI_COMM_WORLD);
         }
     }
 }
