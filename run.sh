@@ -4,7 +4,7 @@ PPN=3
 
 export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
 
-hosts="dgx-gaia-40:$PPN"
+hosts="dgx-gaia-58:$PPN"
 
 set -x
 

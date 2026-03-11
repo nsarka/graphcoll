@@ -1,117 +1,6 @@
 #include <vector>
 #include <mpi.h>
-#include  "graph.hpp"
-
-// To make it easy, assume the sendbuf is inplace
-void test_ring_allgather(int rank, int comm_size) {
-    int *recvbuf = (int*) malloc(sizeof(int) * comm_size);
-
-    if (rank == 0) {
-        std::cout << "Building test ring allgather graph with " << comm_size << " other ranks in the comm" << std::endl;
-    }
-
-    // Add my_data to a list of buffers we'll pass to the execution engine
-    std::vector<GraphColl::Buffer> my_rank_buffer_list;
-    GraphColl::Buffer buf;
-
-    // Push recvbufs (one portion of the total recvbuf for each rank)
-    // Buffer index i is at offset i of the recvbuf for an allgather
-    for (int i = 0; i < comm_size; i++) {
-        if (rank == i) {
-            recvbuf[i] = rank; // Set the data inplace
-            buf.type = GraphColl::BufferType::Source; // Source buffer is a source in the graph
-        } else if (i == (rank + 1) % comm_size) { // Last buffer in the ring to get filled in doesn't get sent
-            buf.type = GraphColl::BufferType::Sink; // Destination buffer is a sink in the graph
-        } else {
-            buf.type = GraphColl::BufferType::Intermediate; // Intermediates are part of dependent edges (recv then send a buffer)
-        }
-        buf.data = &recvbuf[i];
-        buf.size = sizeof(int) * comm_size;
-        my_rank_buffer_list.push_back(buf);
-    }
-
-    // Set up the ring allgather
-    GraphColl::Graph allgather(rank, comm_size);
-    for (int i = 0; i < comm_size; i++) {
-        for (int j = 0; j < comm_size - 1; j++) {
-            //if (i == j) continue; // The buffer is already inplace
-            // Add send to the next rank (in the i loop, i is the current rank we're considering in the graph))
-            allgather.addEdge(i, (i + 1) % comm_size, (i - j + comm_size) % comm_size, (i - j + comm_size) % comm_size);
-            // Add recv from the prev rank
-            allgather.addEdge((i - 1 + comm_size) % comm_size, i, (i - j - 1 + comm_size) % comm_size, (i - j - 1 + comm_size) % comm_size);
-        }
-    }
-
-    std::cout << "Executing ring allgather graph..." << std::endl; 
-    allgather.execute(my_rank_buffer_list);
-    std::cout << "Done executing ring allgather graph" << std::endl; 
-    
-    // Validate
-    for (int i = 0; i < comm_size; i++) {
-        if (recvbuf[i] != i) {
-            std::cout << "rank " << rank << ": recvbuf[" << i << "] incorrect: " << recvbuf[i] << std::endl;
-        }
-    }
-
-    free(recvbuf);
-}
-
-void test_allgather(int rank, int comm_size) {
-    int *sendbuf = (int*) malloc(sizeof(int));
-    int *recvbuf = (int*) malloc(sizeof(int) * comm_size);
-
-    *sendbuf = rank;
-
-    if (rank == 0) {
-        std::cout << "Building test allgather graph with " << comm_size << " other ranks in the comm" << std::endl;
-    }
-
-    // Add my_data to a list of buffers we'll pass to the execution engine
-    // Since bcast only has one sendbuf, the list is of length 1
-    std::vector<GraphColl::Buffer> my_rank_buffer_list;
-    GraphColl::Buffer buf;
-
-    // Push sendbuf
-    buf.data = sendbuf;
-    buf.size = sizeof(int) * 1;
-    buf.type = GraphColl::BufferType::Source;
-    my_rank_buffer_list.push_back(buf);
-
-    // Push recvbufs (one portion of the total recvbuf for each rank)
-    // Buffer index i is at offset i of the recvbuf for an allgather
-    for (int i = 0; i < comm_size; i++) {
-        buf.data = &recvbuf[i];
-        buf.size = sizeof(int) * comm_size;
-        buf.type = GraphColl::BufferType::Sink;
-        my_rank_buffer_list.push_back(buf);
-    }
-
-    // Set up an allgather graph--there are effectively comm_size number of broadcasts
-    GraphColl::Graph allgather(rank, comm_size);
-    // src, dst, send/recv buf index in the buffer list
-    // send buf index being 0 for each i,j means any time the sender goes to send, he'll always use my_rank_buffer_list[0]
-    // recv index for each recv in an allgather is the rank of the sender (offset by 1 because the sendbuf is in the first spot)
-    for (int i = 0; i < comm_size; i++) {
-        for (int j = 0; j < comm_size; j++) {
-            // include i=j because it must copy from send to recv buf
-            allgather.addEdge(i, j, 0, i+1);
-        }
-    }
-
-    std::cout << "Executing allgather graph..." << std::endl; 
-    allgather.execute(my_rank_buffer_list);
-    std::cout << "Done executing allgather graph" << std::endl; 
-    
-    // Validate
-    for (int i = 0; i < comm_size; i++) {
-        if (recvbuf[i] != i) {
-            std::cout << "rank " << rank << ": recvbuf[" << i << "] incorrect: " << recvbuf[i] << std::endl;
-        }
-    }
-
-    free(sendbuf);
-    free(recvbuf);
-}
+#include "graph.hpp"
 
 void test_bcast(int rank, int comm_size) {
     int root = 1;
@@ -167,8 +56,6 @@ int main(int argc, const char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     test_bcast(rank, comm_size);
-    test_allgather(rank, comm_size);
-    //test_ring_allgather(rank, comm_size);
 
     // Finalize the MPI environment.
     MPI_Finalize();
